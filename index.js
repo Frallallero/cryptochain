@@ -10,20 +10,23 @@ const TransactionMiner = require('./app/transaction-miner')
 
 const isDevelopment = process.env.ENV === 'development'
 
+const REDIS_URL = isDevelopment
+    ? 'redis://127.0.0.1:6379'
+    : 'redis://:p8ef729207c7c7e65d040e6a5a404cb3bc716a7a6fa7d14ce9b8847de9bb62a22@ec2-99-81-134-10.eu-west-1.compute.amazonaws.com:19750'
+const DEFAULT_PORT = 3000
+const ROOT_NODE_ADDRESS = `http://localhost:${DEFAULT_PORT}`
+
 const app = express()
 const blockchain = new Blockchain()
 const transactionPool = new TransactionPool()
 const wallet = new Wallet()
-const pubsub = new PubSub({ blockchain, transactionPool, wallet })
+const pubsub = new PubSub({ blockchain, transactionPool, redisUrl: REDIS_URL })
 const transactionMiner = new TransactionMiner({
     blockchain,
     transactionPool,
     wallet,
     pubsub
 })
-
-const DEFAULT_PORT = 3000
-const ROOT_NODE_ADDRESS = `http://localhost:${DEFAULT_PORT}`
 
 app.use(bodyParser.json())
 app.use(express.static(path.join(__dirname, 'client/dist')))

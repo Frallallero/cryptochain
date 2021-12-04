@@ -1,4 +1,10 @@
-const redis = require('redis')
+const PubNub = require('pubnub')
+
+const credentials = {
+    publishKey: 'pub-c-ab93966b-c559-4b6e-a503-1bea83ae4fd1',
+    subscribeKey: 'sub-c-c4d69ca0-4887-11ec-8edf-3eb83c281352',
+    secretKey: 'sec-c-NTA4NDE0MTYtNGM1MC00YjYwLTlhZjktNzBhMjg5NzgyMWM4'
+}
 
 const CHANNELS = {
     TEST: 'TEST',
@@ -7,25 +13,31 @@ const CHANNELS = {
 }
 
 class PubSub {
-    constructor({ blockchain, transactionPool, redisUrl }) {
+    constructor({ blockchain, transactionPool, wallet }) {
         this.blockchain = blockchain
         this.transactionPool = transactionPool
+        this.wallet = wallet
 
-        this.publisher = redis.createClient(redisUrl)
-        this.subscriber = redis.createClient(redisUrl)
+        this.pubnub = new PubNub(credentials)
 
-        this.subscribeToChannels()
+        this.pubnub.subscribe({ channels: Object.values(CHANNELS) })
 
-        this.subscriber.on('message', (channel, message) =>
-            this.handleMessage(channel, message)
-        )
+        this.pubnub.addListener(this.listener())
+    }
+
+    listener() {
+        return {
+            message: (messageObject) => {
+                const { message, channel } = messageObject
+
+                console.log(
+                    `Message received. Channel: ${channel}. Message: ${message}`
+                )
+            }
+        }
     }
 
     handleMessage(channel, message) {
-        console.log(
-            `Message received. Channel: ${channel}. Message: ${message}.`
-        )
-
         const parsedMessage = JSON.parse(message)
 
         switch (channel) {
@@ -37,25 +49,23 @@ class PubSub {
                 })
                 break
             case CHANNELS.TRANSACTION:
-                this.transactionPool.setTransaction(parsedMessage)
+                if (
+                    !this.transactionPool.existingTransaction({
+                        inputAddress: this.wallet.publicKey
+                    })
+                ) {
+                    this.transactionPool.setTransaction(parsedMessage)
+                }
                 break
             default:
                 return
         }
     }
 
-    subscribeToChannels() {
-        Object.values(CHANNELS).forEach((channel) => {
-            this.subscriber.subscribe(channel)
-        })
-    }
-
     publish({ channel, message }) {
-        this.subscriber.unsubscribe(channel, () => {
-            this.publisher.publish(channel, message, () => {
-                this.subscriber.subscribe(channel)
-            })
-        })
+        this.pubnub.unsubscribe({ channels: Object.values(CHANNELS) })
+        this.pubnub.publish({ channel, message })
+        this.pubnub.subscribe({ channels: Object.values(CHANNELS) })
     }
 
     broadcastChain() {
@@ -73,4 +83,6 @@ class PubSub {
     }
 }
 
+// const testPubSub = new PubSub()
+// testPubSub.publish({ channel: CHANNELS.TEST, message: 'hello pubnub' })
 module.exports = PubSub
